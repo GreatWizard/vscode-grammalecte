@@ -1,0 +1,63 @@
+Quoi ? Racontes ! Racontes-moi ! Bon sangg, parles ! Oui. Il y a des menteur partout.
+    ^^ ^^^^^^^^   ^^^^^^^^^^^^       °°°°°  ^^^^^^                   ^^^^^^^
+* 1 [4:6]  # #1047p / nbsp_avant_double_ponctuation:
+  Il manque un espace insécable.
+  > Suggestions :  ?
+* 2 [7:15]  # #22492 / imp_verbe_groupe1__b2_a0_0:
+  S’il s’agit d’un impératif, pas de “s”.
+  > Suggestions : Raconte
+* 3 [18:30]  # #2411 / imp_verbes_composés_impératifs__b5_a0_0:
+  Ceci n’est pas une forme impérative correcte.
+  > Suggestions : Raconte-moi | Racontez-moi | Racontons-moi
+  > URL: http://fr.wikipedia.org/wiki/Imp%C3%A9ratif_%28grammaire%29
+* 5 [44:50]  # #5890 / conj_xxxas_xxxes__sans_sujet__b4_a0_0:
+  Incohérence. Ceci est un verbe à la 2ᵉ personne du singulier. Sujet (“tu” ou “toi qui”)
+    introuvable.
+  > Suggestions : parle
+* 6 [69:76]  # #15600 / gn_det_pluriel_1m__b1_a0_0:
+  Accord de nombre erroné : « menteur » devrait être au pluriel.
+  > Suggestions : menteurs
+
+Je suit sidéré par la brutales arrogance de cette homme-là. Quelle salopard ! Un escrocs de la pire
+   ^^^^               ^^^^^^^^              ^^^^^           ^^^^^^               ^^^^^^^
+* 1 [3:7]  # #5382 / conj_je__b2_a0_0:
+  Conjugaison erronée. Accord avec “Je”. Le verbe devrait être à la 1ʳᵉ personne du singulier.
+  > Suggestions : suis
+* 2 [22:30]  # #15039 / gn_la_1m__b2_a3_0:
+  Accord de nombre erroné : « brutales » devrait être au singulier.
+  > Suggestions : brutale
+* 3 [44:49]  # #15359 / gn_cette_1m__b1_a0_0:
+  Accord de genre erroné : « homme » est masculin.
+  > Suggestions : ce | cet
+* 4 [60:66]  # #15796 / gn_quelle_1m__b1_a4_0:
+  Accord de genre erroné : « salopard » est masculin.
+  > Suggestions : Quel
+* 5 [81:88]  # #15224 / gn_un_1m__b1_a2_0:
+  Accord de nombre erroné : « escrocs » devrait être au singulier.
+  > Suggestions : escroc
+
+espece.
+°°°°°°
+Quant sera t’il châtiés pour ses mensonge ?             Merde ! J’en aie marre.
+^^^^^     ^^^   ^^^^^^^          ^^^^^^^^  ^^^^^^^^^^^^^     ^^      ^^^
+* 1 [0:5]  # #9595 / conf_quand_quant_qu_en__b1_a0_0:
+  Confusion. Quand = à quel moment. Quant à = à propos de.
+  > Suggestions : Quand
+* 2 [10:13]  # #1664s / tu_t_euphonique_incorrect:
+  Pour le “t” euphonique, il faut deux traits d’union. Pas d’apostrophe. Pas d’espace.
+  > Suggestions : -t-
+* 3 [16:23]  # #21642 / ppas_inversion_être_il__b1_a0_0:
+  Accord avec le sujet “il” : “châtiés” devrait être au masculin singulier.
+  > Suggestions : châtié
+* 4 [33:41]  # #15600 / gn_det_pluriel_1m__b1_a0_0:
+  Accord de nombre erroné : « mensonge » devrait être au pluriel.
+  > Suggestions : mensonges
+* 5 [43:56]  # #376p / esp_milieu_ligne:
+  Espace(s) surnuméraire(s) à supprimer.
+  > Suggestions :
+* 6 [61:63]  # #1047p / nbsp_avant_double_ponctuation:
+  Il manque un espace insécable.
+  > Suggestions :  !
+* 7 [69:72]  # #25110 / vmode_sujet_indicatif__b2_a0_0:
+  Ce verbe ne devrait pas être au subjonctif.
+  > Suggestions : ai | aurai | avais | eus
