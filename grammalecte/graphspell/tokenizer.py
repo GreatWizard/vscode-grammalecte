@@ -20,8 +20,12 @@ _PATTERNS = {
             r'(?P<PSEUDOHTML>\[/?\w+\])',
             r'(?P<HOUR>\d\d?[h:]\d\d(?:[m:]\d\ds?|)\b)',
             r'(?P<NUM>\d+(?:[.,]\d+))',
-            r'(?P<SIGN>[&%‰€$+±=*/<>⩾⩽#|×¥£§¢¬÷@-])',
-            r"(?P<WORD>\w+(?:[’'`-]\w+)*)"
+            r'(?P<SIGN>[&%‰€$+±=*/<>⩾⩽#|×¥£§¢฿¬÷@-])',
+            r"(?P<WORD>(?:(?!_)[\w\u0300-\u036f])+(?:[’'`-](?:(?!_)[\w\u0300-\u036f])+)*)",        # with combining diacritics
+            r"(?P<UNDERSCORE>_+)",
+            r"(?P<SYMBOL>[\u2600-\u26ff\u2700-\u27bf\U0001f650-\U0001f67f\U0001f700-\U0001f77f\U0001f780-\U0001f7ff\U0001f800-\U0001f8ff])",
+            r"(?P<EMOJI>[\U0001f300-\U0001f5ff\U0001f600-\U0001f64f\U0001f680-\U0001f6ff\U0001f900-\U0001f9ff]+)",
+            r"(?P<OTHER>\S)"
         ),
     "fr":
         (
@@ -33,12 +37,16 @@ _PATTERNS = {
             r'(?P<HASHTAG>[#@][\w-]+)',
             r'(?P<HTML><\w+.*?>|</\w+ *>)',
             r'(?P<PSEUDOHTML>\[/?\w+\])',
-            r"(?P<WORD_ELIDED>(?:l|d|n|m|t|s|j|c|ç|lorsqu|puisqu|jusqu|quoiqu|qu|presqu|quelqu)['’´‘′`ʼ])",
-            r'(?P<WORD_ORDINAL>\d+(?:ers?|res?|è[rm]es?|i[èe][mr]es?|de?s?|nde?s?|ès?|es?|ᵉʳˢ?|ʳᵉˢ?|ᵈᵉ?ˢ?|ⁿᵈᵉ?ˢ?|ᵉˢ?)\b)',
+            r"(?P<WORDELD>(?:l|d|n|m|t|s|j|c|ç|lorsqu|puisqu|jusqu|quoiqu|qu|presqu|quelqu)['’ʼ‘‛´`′‵՚ꞌꞋ])",
+            r'(?P<WORDORD>\d+(?:ers?|res?|è[rm]es?|i[èe][mr]es?|de?s?|nde?s?|ès?|es?|ᵉʳˢ?|ʳᵉˢ?|ᵈᵉ?ˢ?|ⁿᵈᵉ?ˢ?|ᵉˢ?)\b)',
             r'(?P<HOUR>\d\d?[h:]\d\d(?:[m:]\d\ds?|)\b)',
             r'(?P<NUM>\d+(?:[.,]\d+|))',
-            r'(?P<SIGN>[&%‰€$+±=*/<>⩾⩽#|×¥£¢§¬÷@-])',
-            r"(?P<WORD>[\w\u0300-\u036f]+(?:[’'`-][\w\u0300-\u036f]+)*)"
+            r'(?P<SIGN>[&%‰€$+±=*/<>⩾⩽#|×¥£¢฿§¬÷@-])',
+            r"(?P<WORD>(?:(?!_)[\w\u0300-\u036f])+(?:[’'`-](?:(?!_)[\w\u0300-\u036f])+)*)",        # with combining diacritics
+            r"(?P<UNDERSCORE>_+)",
+            r"(?P<SYMBOL>[\u2600-\u26ff\u2700-\u27bf\U0001f650-\U0001f67f\U0001f700-\U0001f77f\U0001f780-\U0001f7ff\U0001f800-\U0001f8ff])",
+            r"(?P<EMOJI>[\U0001f300-\U0001f5ff\U0001f600-\U0001f64f\U0001f680-\U0001f6ff\U0001f900-\U0001f9ff]+)",
+            r"(?P<OTHER>\S)"
         )
 }
 

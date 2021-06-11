@@ -28,7 +28,7 @@ _dImpeProNegEn = { ":2s": "ne t’en ", ":1p": "ne nous en ", ":2p": "ne vous en
 
 _dGroup = { "0": "auxiliaire", "1": "1ᵉʳ groupe", "2": "2ᵉ groupe", "3": "3ᵉ groupe" }
 
-_dTenseIdx = { ":PQ": 0, ":Ip": 1, ":Iq": 2, ":Is": 3, ":If": 4, ":K": 5, ":Sp": 6, ":Sq": 7, ":E": 8 }
+_dTenseIdx = { ":P": 0, ":Q": 1, ":Ip": 2, ":Iq": 3, ":Is": 4, ":If": 5, ":K": 6, ":Sp": 7, ":Sq": 8, ":E": 9 }
 
 
 
@@ -41,6 +41,8 @@ def getConj (sVerb, sTense, sWho):
     "returns conjugation (can be an empty string)"
     if sVerb not in _dVerb:
         return None
+    if sTense == ":Y":
+        return sVerb
     return _modifyStringWithSuffixCode(sVerb, _dPatternConj[sTense][_lTags[_dVerb[sVerb][1]][_dTenseIdx[sTense]]].get(sWho, ""))
 
 
@@ -48,7 +50,7 @@ def hasConj (sVerb, sTense, sWho):
     "returns False if no conjugation (also if empty) else True"
     if sVerb not in _dVerb:
         return False
-    if _dPatternConj[sTense][_lTags[_dVerb[sVerb][1]][_dTenseIdx[sTense]]].get(sWho, False):
+    if sTense == ":Y" or _dPatternConj[sTense][_lTags[_dVerb[sVerb][1]][_dTenseIdx[sTense]]].get(sWho, False):
         return True
     return False
 
@@ -60,69 +62,46 @@ def getVtyp (sVerb):
     return _lVtyp[_dVerb[sVerb][0]]
 
 
-def getSimil (sWord, sMorph, bSubst=False):
-    "returns a set of verbal forms similar to <sWord>, according to <sMorph>"
-    if ":V" not in sMorph:
-        return set()
-    sInfi = sMorph[1:sMorph.find("/")]
-    aSugg = set()
-    tTags = _getTags(sInfi)
+def getNamesFrom (sVerb):
+    "returns a list of names derivating from <sVerb>"
+    if sVerb in _dVerbNames:
+        # there are names derivated from the verb
+        return list(_dVerbNames[sVerb])
+    # nothing found: we suggest past participles
+    tTags = _getTags(sVerb)
     if tTags:
-        if not bSubst:
-            # we suggest conjugated forms
-            if ":V1" in sMorph:
-                aSugg.add(sInfi)
-                aSugg.add(_getConjWithTags(sInfi, tTags, ":Ip", ":3s"))
-                aSugg.add(_getConjWithTags(sInfi, tTags, ":Ip", ":2p"))
-                aSugg.add(_getConjWithTags(sInfi, tTags, ":Iq", ":1s"))
-                aSugg.add(_getConjWithTags(sInfi, tTags, ":Iq", ":3s"))
-                aSugg.add(_getConjWithTags(sInfi, tTags, ":Iq", ":3p"))
-            elif ":V2" in sMorph:
-                aSugg.add(_getConjWithTags(sInfi, tTags, ":Ip", ":1s"))
-                aSugg.add(_getConjWithTags(sInfi, tTags, ":Ip", ":3s"))
-            elif ":V3" in sMorph:
-                aSugg.add(_getConjWithTags(sInfi, tTags, ":Ip", ":1s"))
-                aSugg.add(_getConjWithTags(sInfi, tTags, ":Ip", ":3s"))
-                aSugg.add(_getConjWithTags(sInfi, tTags, ":Is", ":1s"))
-                aSugg.add(_getConjWithTags(sInfi, tTags, ":Is", ":3s"))
-            elif ":V0a" in sMorph:
-                aSugg.add("eus")
-                aSugg.add("eut")
-            else:
-                aSugg.add("étais")
-                aSugg.add("était")
-            aSugg.discard("")
-        else:
-            if sInfi in _dVerbNames:
-                # there are names derivated from the verb
-                aSugg.update(_dVerbNames[sInfi])
-            else:
-                # we suggest past participles
-                aSugg.add(_getConjWithTags(sInfi, tTags, ":PQ", ":Q1"))
-                aSugg.add(_getConjWithTags(sInfi, tTags, ":PQ", ":Q2"))
-                aSugg.add(_getConjWithTags(sInfi, tTags, ":PQ", ":Q3"))
-                aSugg.add(_getConjWithTags(sInfi, tTags, ":PQ", ":Q4"))
-                aSugg.discard("")
-                # if there is only one past participle (epi inv), unreliable.
-                if len(aSugg) == 1:
-                    aSugg.clear()
-    return aSugg
+        aSugg = [ _getConjWithTags(sVerb, tTags, ":Q", ":m:s") ]
+        if _hasConjWithTags(tTags, ":Q", ":f:s"):
+            aSugg.append(_getConjWithTags(sVerb, tTags, ":Q", ":f:s"))
+        if _hasConjWithTags(tTags, ":Q", ":m:p"):
+            aSugg.append(_getConjWithTags(sVerb, tTags, ":Q", ":m:p"))
+        if _hasConjWithTags(tTags, ":Q", ":f:p"):
+            aSugg.append(_getConjWithTags(sVerb, tTags, ":Q", ":f:p"))
+        # if there is only one past participle (epi inv), unreliable.
+        return aSugg  if len(aSugg) > 1  else []
+    return []
 
 
 def getConjSimilInfiV1 (sInfi):
     "returns verbal forms phonetically similar to infinitive form (for verb in group 1)"
     if sInfi not in _dVerb:
-        return set()
-    aSugg = set()
+        return []
+    aSugg = []
     tTags = _getTags(sInfi)
     if tTags:
-        aSugg.add(_getConjWithTags(sInfi, tTags, ":Iq", ":2s"))
-        aSugg.add(_getConjWithTags(sInfi, tTags, ":Iq", ":3s"))
-        aSugg.add(_getConjWithTags(sInfi, tTags, ":Iq", ":3p"))
-        aSugg.add(_getConjWithTags(sInfi, tTags, ":Is", ":1s"))
-        aSugg.add(_getConjWithTags(sInfi, tTags, ":Ip", ":2p"))
-        aSugg.add(_getConjWithTags(sInfi, tTags, ":Iq", ":2p"))
-        aSugg.discard("")
+        # example: arriver, arrivais, arrivait, arrivai, arrivez, arriviez
+        if _hasConjWithTags(tTags, ":Iq", ":2s"):
+            aSugg.append(_getConjWithTags(sInfi, tTags, ":Iq", ":2s"))
+        if _hasConjWithTags(tTags, ":Iq", ":3s"):
+            aSugg.append(_getConjWithTags(sInfi, tTags, ":Iq", ":3s"))
+        if _hasConjWithTags(tTags, ":Iq", ":3p"):
+            aSugg.append(_getConjWithTags(sInfi, tTags, ":Iq", ":3p"))
+        if _hasConjWithTags(tTags, ":Is", ":1s"):
+            aSugg.append(_getConjWithTags(sInfi, tTags, ":Is", ":1s"))
+        if _hasConjWithTags(tTags, ":Ip", ":2p"):
+            aSugg.append(_getConjWithTags(sInfi, tTags, ":Ip", ":2p"))
+        if _hasConjWithTags(tTags, ":Iq", ":2p"):
+            aSugg.append(_getConjWithTags(sInfi, tTags, ":Iq", ":2p"))
     return aSugg
 
 
@@ -135,12 +114,14 @@ def _getTags (sVerb):
 
 def _getConjWithTags (sVerb, tTags, sTense, sWho):
     "returns conjugation (can be an empty string)"
+    if sTense == ":Y":
+        return sVerb
     return _modifyStringWithSuffixCode(sVerb, _dPatternConj[sTense][tTags[_dTenseIdx[sTense]]].get(sWho, ""))
 
 
 def _hasConjWithTags (tTags, sTense, sWho):
     "returns False if no conjugation (also if empty) else True"
-    if _dPatternConj[sTense][tTags[_dTenseIdx[sTense]]].get(sWho, False):
+    if sTense == ":Y" or _dPatternConj[sTense][tTags[_dTenseIdx[sTense]]].get(sWho, False):
         return True
     return False
 
@@ -198,18 +179,18 @@ class Verb ():
         self.dConj = {
             ":Y": {
                 "label": "Infinitif",
-                ":": sVerb,
+                ":Y": sVerb,
             },
             ":P": {
                 "label": "Participe présent",
-                ":": _getConjWithTags(sVerb, self._tTags, ":PQ", ":P"),
+                ":P": _getConjWithTags(sVerb, self._tTags, ":P", ":P"),
             },
             ":Q": {
                 "label": "Participes passés",
-                ":Q1": _getConjWithTags(sVerb, self._tTags, ":PQ", ":Q1"),
-                ":Q2": _getConjWithTags(sVerb, self._tTags, ":PQ", ":Q2"),
-                ":Q3": _getConjWithTags(sVerb, self._tTags, ":PQ", ":Q3"),
-                ":Q4": _getConjWithTags(sVerb, self._tTags, ":PQ", ":Q4"),
+                ":m:s": _getConjWithTags(sVerb, self._tTags, ":Q", ":m:s"),
+                ":f:s": _getConjWithTags(sVerb, self._tTags, ":Q", ":f:s"),
+                ":m:p": _getConjWithTags(sVerb, self._tTags, ":Q", ":m:p"),
+                ":f:p": _getConjWithTags(sVerb, self._tTags, ":Q", ":f:p"),
             },
             ":Ip": {
                 "label": "Présent",
@@ -351,12 +332,12 @@ class Verb ():
     def participePresent (self, bPro, bNeg, bTpsCo, bInt, bFem):
         "returns string (conjugaison du participe présent)"
         try:
-            if not self.dConj[":P"][":"]:
+            if not self.dConj[":P"][":P"]:
                 return ""
             if bTpsCo:
-                sPartPre = _getConjWithTags(self.sVerbAux, self._tTagsAux, ":PQ", ":P")  if not bPro  else  getConj("être", ":PQ", ":P")
+                sPartPre = _getConjWithTags(self.sVerbAux, self._tTagsAux, ":P", ":P")  if not bPro  else  getConj("être", ":P", ":P")
             else:
-                sPartPre = self.dConj[":P"][":"]
+                sPartPre = self.dConj[":P"][":P"]
             if not sPartPre:
                 return ""
             bEli = bool(_zStartVoy.search(sPartPre))
@@ -469,12 +450,12 @@ class Verb ():
     def _seekPpas (self, bPro, bFem, bPlur):
         try:
             if not bPro and self.sVerbAux == "avoir":
-                return self.dConj[":Q"][":Q1"]
+                return self.dConj[":Q"][":m:s"]
             if not bFem:
-                return self.dConj[":Q"][":Q2"]  if bPlur and self.dConj[":Q"][":Q2"]  else  self.dConj[":Q"][":Q1"]
+                return self.dConj[":Q"][":f:s"]  if bPlur and self.dConj[":Q"][":f:s"]  else  self.dConj[":Q"][":m:s"]
             if not bPlur:
-                return self.dConj[":Q"][":Q3"]  if self.dConj[":Q"][":Q3"]  else  self.dConj[":Q"][":Q1"]
-            return self.dConj[":Q"][":Q4"]  if self.dConj[":Q"][":Q4"]  else  self.dConj[":Q"][":Q1"]
+                return self.dConj[":Q"][":m:p"]  if self.dConj[":Q"][":m:p"]  else  self.dConj[":Q"][":m:s"]
+            return self.dConj[":Q"][":f:p"]  if self.dConj[":Q"][":f:p"]  else  self.dConj[":Q"][":m:s"]
         except KeyError:
             traceback.print_exc()
             return "# erreur"
@@ -487,10 +468,10 @@ class Verb ():
             "t_ppre":   "Participe présent",
             "ppre":     self.participePresent(bPro, bNeg, bTpsCo, bInt, bFem),
             "t_ppas":   "Participes passés",
-            "ppas1":    self.participePasse(":Q1"),
-            "ppas2":    self.participePasse(":Q2"),
-            "ppas3":    self.participePasse(":Q3"),
-            "ppas4":    self.participePasse(":Q4"),
+            "ppas1":    self.participePasse(":m:s"),
+            "ppas2":    self.participePasse(":f:s"),
+            "ppas3":    self.participePasse(":m:p"),
+            "ppas4":    self.participePasse(":f:p"),
             "t_imp":    "Impératif",
             "t_impe":   ""  if bInt  else "Présent"  if not bTpsCo  else "Passé",
             "impe1":    self.imperatif(":2s", bPro, bNeg, bTpsCo, bFem)  if not bInt  else "",
