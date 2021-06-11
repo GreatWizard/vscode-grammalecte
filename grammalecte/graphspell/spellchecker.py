@@ -8,6 +8,7 @@ To avoid iterating over a pile of dictionaries, it is assumed that 3 are enough:
 - the personal dictionary, created by the user for its own convenience
 """
 
+import re
 import importlib
 import traceback
 
@@ -16,8 +17,8 @@ from . import tokenizer
 
 
 dDefaultDictionaries = {
-    "fr": "fr-allvars.bdic",
-    "en": "en.bdic"
+    "fr": "fr-allvars.json",
+    "en": "en.json"
 }
 
 
@@ -36,8 +37,8 @@ class SpellChecker ():
         self.bPersonalDic = bool(self.oPersonalDic)
         self.oTokenizer = None
         # Default suggestions
-        self.dDefaultSugg = None
-        self.loadSuggestions(sLangCode)
+        self.lexicographer = None
+        self.loadLexicographer(sLangCode)
         # storage
         self.bStorage = False
         self._dMorphologies = {}        # key: flexion, value: list of morphologies
@@ -100,16 +101,63 @@ class SpellChecker ():
         self.bPersonalDic = False
 
 
-    # Default suggestions
+    # Lexicographer
 
-    def loadSuggestions (self, sLangCode):
+    def loadLexicographer (self, sLangCode):
         "load default suggestion module for <sLangCode>"
         try:
-            suggest = importlib.import_module("."+sLangCode, "grammalecte.graphspell")
+            self.lexicographer = importlib.import_module(".lexgraph_"+sLangCode, "grammalecte.graphspell")
         except ImportError:
             print("No suggestion module for language <"+sLangCode+">")
             return
-        self.dDefaultSugg = suggest.dSugg
+
+    def analyze (self, sWord):
+        "returns a list of words and their morphologies"
+        if not self.lexicographer:
+            return []
+        lWordAndMorph = []
+        for sElem in self.lexicographer.split(sWord):
+            if sElem:
+                lMorph = self.getMorph(sElem)
+                sLex = self.lexicographer.analyze(sElem)
+                if sLex:
+                    aRes = [ (" | ".join(lMorph), sLex) ]
+                else:
+                    aRes = [ (sMorph, self.lexicographer.readableMorph(sMorph)) for sMorph in lMorph ]
+                if aRes:
+                    lWordAndMorph.append((sElem, aRes))
+        return lWordAndMorph
+
+    def readableMorph (self, sMorph):
+        "returns a human readable meaning of tags of <sMorph>"
+        if not self.lexicographer:
+            return ""
+        return self.lexicographer.readableMorph(sMorph)
+
+    def setLabelsOnToken (self, dToken):
+        """on <dToken>,
+            adds:
+                - lMorph: list of morphologies
+                - aLabels: list of labels (human readable meaning of tags)
+            for WORD tokens:
+                - bValidToken: True if the token is valid for the spellchecker
+                - lSubTokens for each parts of the split token
+        """
+        if not self.lexicographer:
+            return
+        if dToken["sType"].startswith("WORD"):
+            dToken["bValidToken"] = True  if "lMorph" in dToken  else self.isValidToken(dToken["sValue"])
+        if "lMorph" not in dToken:
+            dToken["lMorph"] = self.getMorph(dToken["sValue"])
+        if dToken["sType"].startswith("WORD"):
+            sPrefix, sStem, sSuffix = self.lexicographer.split(dToken["sValue"])
+            if sStem != dToken["sValue"]:
+                dToken["lSubTokens"] = [
+                    { "sType": "WORD", "sValue": sPrefix, "lMorph": self.getMorph(sPrefix) },
+                    { "sType": "WORD", "sValue": sStem,   "lMorph": self.getMorph(sStem)   },
+                    { "sType": "WORD", "sValue": sSuffix, "lMorph": self.getMorph(sSuffix) }
+                ]
+        self.lexicographer.setLabelsOnToken(dToken)
 
 
     # Storage
@@ -162,6 +210,7 @@ class SpellChecker ():
                             dWord[sLemma] = dWord.get(sLemma, 0) + 1
         return dWord
 
+
     # IBDAWG functions
 
     def isValidToken (self, sToken):
@@ -208,6 +257,24 @@ class SpellChecker ():
             self._dLemmas[sWord] = { s[1:s.find("/")]  for s in lMorph }
         return lMorph
 
+    def morph (self, sWord, sPattern, sNegPattern=""):
+        "analyse a word, return True if <sNegPattern> not in morphologies and <sPattern> in morphologies"
+        lMorph = self.getMorph(sWord)
+        if not lMorph:
+            return False
+        # check negative condition
+        if sNegPattern:
+            if sNegPattern == "*":
+                # all morph must match sPattern
+                zPattern = re.compile(sPattern)
+                return all(zPattern.search(sMorph)  for sMorph in lMorph)
+            zNegPattern = re.compile(sNegPattern)
+            if any(zNegPattern.search(sMorph)  for sMorph in lMorph):
+                return False
+        # search sPattern
+        zPattern = re.compile(sPattern)
+        return any(zPattern.search(sMorph)  for sMorph in lMorph)
+
     def getLemma (self, sWord):
         "retrieves lemmas"
         if self.bStorage:
@@ -218,14 +285,16 @@ class SpellChecker ():
 
     def suggest (self, sWord, nSuggLimit=10):
         "generator: returns 1, 2 or 3 lists of suggestions"
-        if self.dDefaultSugg:
-            if sWord in self.dDefaultSugg:
-                yield self.dDefaultSugg[sWord].split("|")
-            elif sWord.istitle() and sWord.lower() in self.dDefaultSugg:
-                lRes = self.dDefaultSugg[sWord.lower()].split("|")
-                yield list(map(lambda sSugg: sSugg[0:1].upper()+sSugg[1:], lRes))
+        if self.lexicographer:
+            if sWord in self.lexicographer.dSugg:
+                yield self.lexicographer.dSugg[sWord].split("|")
+            elif sWord.istitle() and sWord.lower() in self.lexicographer.dSugg:
+                lSuggs = self.lexicographer.dSugg[sWord.lower()].split("|")
+                yield list(map(lambda sSugg: sSugg[0:1].upper()+sSugg[1:], lSuggs))
             else:
-                yield self.oMainDic.suggest(sWord, nSuggLimit, True)
+                lSuggs = self.oMainDic.suggest(sWord, nSuggLimit, True)
+                lSuggs = [ sSugg  for sSugg in lSuggs  if self.lexicographer.isValidSugg(sSugg, self) ]
+                yield lSuggs
         else:
             yield self.oMainDic.suggest(sWord, nSuggLimit, True)
         if self.bCommunityDic:

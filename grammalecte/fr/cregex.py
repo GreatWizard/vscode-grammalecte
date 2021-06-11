@@ -8,8 +8,7 @@ import re
 Lemma = re.compile(r"^>(\w[\w-]*)")
 
 #### Analyses
-Gender = re.compile(":[mfe]")
-Number = re.compile(":[spi]")
+GenderNumber = re.compile(":[mfe]:[spi]")
 
 #### Nom et adjectif
 NA = re.compile(":[NA]")
@@ -85,20 +84,13 @@ def getLemmaOfMorph (s):
     "return lemma in morphology <s>"
     return Lemma.search(s).group(1)
 
-def checkAgreement (l1, l2):
+def agreement (l1, l2):
     "returns True if agreement in gender and number is possible between morphologies <l1> and <l2>"
-    # check number agreement
-    if not mbInv(l1) and not mbInv(l2):
-        if mbSg(l1) and not mbSg(l2):
-            return False
-        if mbPl(l1) and not mbPl(l2):
-            return False
-    # check gender agreement
-    if mbEpi(l1) or mbEpi(l2):
-        return True
-    if mbMas(l1) and not mbMas(l2):
+    sGender1, sNumber1 = getGenderNumber(l1)
+    sGender2, sNumber2 = getGenderNumber(l2)
+    if sNumber1 != ":i" and sNumber2 != ":i" and sNumber1 != sNumber2:
         return False
-    if mbFem(l1) and not mbFem(l2):
+    if sGender1 != ":e" and sGender2 != ":e" and sGender1 != sGender2:
         return False
     return True
 
@@ -106,29 +98,25 @@ def checkConjVerb (lMorph, sReqConj):
     "returns True if <sReqConj> in <lMorph>"
     return any(sReqConj in s  for s in lMorph)
 
-def getGender (lMorph):
-    "returns gender of word (':m', ':f', ':e' or empty string)."
+def getGenderNumber (lMorph):
+    "returns tuple (gender, number) of word: (':m', ':f', ':e' or empty string) and (':s', ':p', ':i' or empty string)"
     sGender = ""
-    for sMorph in lMorph:
-        m = Gender.search(sMorph)
-        if m:
-            if not sGender:
-                sGender = m.group(0)
-            elif sGender != m.group(0):
-                return ":e"
-    return sGender
-
-def getNumber (lMorph):
-    "returns number of word (':s', ':p', ':i' or empty string)."
     sNumber = ""
     for sMorph in lMorph:
-        m = Number.search(sMorph)
+        m = GenderNumber.search(sMorph)
         if m:
+            sGenderx = m.group(0)[0:2]
+            sNumberx = m.group(0)[2:4]
+            if not sGender:
+                sGender = sGenderx
+            elif sGender != sGenderx:
+                sGender = ":e"
             if not sNumber:
-                sNumber = m.group(0)
-            elif sNumber != m.group(0):
-                return ":i"
-    return sNumber
+                sNumber = sNumberx
+            elif sNumber != sNumberx:
+                sNumber = ":i"
+    return sGender, sNumber
+
 
 # NOTE :  isWhat (lMorph)    returns True   if lMorph contains nothing else than What
 #         mbWhat (lMorph)    returns True   if lMorph contains What at least once

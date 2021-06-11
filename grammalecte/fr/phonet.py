@@ -12,7 +12,7 @@ from .phonet_data import dMorph as _dMorph
 
 
 def hasSimil (sWord, sPattern=None):
-    "return True if there is list of words phonetically similar to sWord"
+    "return True if there is list of words phonetically similar to <sWord>"
     if not sWord:
         return False
     if sWord in _dWord:
@@ -29,7 +29,7 @@ def hasSimil (sWord, sPattern=None):
 
 
 def getSimil (sWord):
-    "return list of words phonetically similar to sWord"
+    "return list of words phonetically similar to <sWord>"
     if not sWord:
         return []
     if sWord in _dWord:
@@ -42,12 +42,34 @@ def getSimil (sWord):
 
 
 def selectSimil (sWord, sPattern):
-    "return a set of words phonetically similar to sWord and whom POS is matching sPattern"
+    "return a list of words phonetically similar to <sWord> and whom POS is matching <sPattern>"
     if not sPattern:
-        return set(getSimil(sWord))
-    aSelect = set()
+        return getSimil(sWord)
+    aSelect = []
     for sSimil in getSimil(sWord):
         for sMorph in _dMorph.get(sSimil, []):
             if re.search(sPattern, sMorph):
-                aSelect.add(sSimil)
+                aSelect.append(sSimil)
     return aSelect
+
+
+def _getSetNumber (sWord):
+    "return the set number where <sWord> belongs, else -1"
+    if sWord in _dWord:
+        return _dWord[sWord]
+    if sWord[0:1].isupper():
+        if sWord.lower() in _dWord:
+            return _dWord[sWord.lower()]
+        if sWord.isupper() and sWord.capitalize() in _dWord:
+            return _dWord[sWord.capitalize()]
+    return -1
+
+
+def isSimilAs (sWord, sSimil):
+    "return True if <sWord> phonetically similar to <sSimil> (<sWord> tested with several casing)"
+    if not sWord or not sSimil:
+        return False
+    n = _getSetNumber(sWord)
+    if n == -1:
+        return False
+    return n == _getSetNumber(sSimil)

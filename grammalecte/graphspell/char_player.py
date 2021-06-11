@@ -3,49 +3,48 @@ List of similar chars
 useful for suggestion mechanism
 """
 
-import re
-import unicodedata
+
+dDistanceBetweenChars = {
+    # dDistanceBetweenChars:
+    # - with Jaro-Winkler, values between 1 and 10
+    # - with Damerau-Levenshtein, values / 10 (between 0 and 1: 0.1, 0.2 ... 0.9)
+    #"a": {},
+    "e": {"é": 5},
+    "é": {"e": 5},
+    "i": {"y": 2},
+    #"o": {},
+    #"u": {},
+    "y": {"i": 3},
+    "b": {"d": 8, "h": 9},
+    "c": {"ç": 1, "k": 5, "q": 5, "s": 5, "x": 5, "z": 8},
+    "d": {"b": 8},
+    "f": {"v": 8},
+    "g": {"j": 5},
+    "h": {"b": 9},
+    "j": {"g": 5, "i": 9},
+    "k": {"c": 5, "q": 1, "x": 5},
+    "l": {"i": 9},
+    "m": {"n": 8},
+    "n": {"m": 8, "r": 9},
+    "p": {"q": 9},
+    "q": {"c": 5, "k": 1, "p": 9},
+    "r": {"n": 9, "j": 9},
+    "s": {"c": 5, "ç": 1, "x": 5, "z": 5},
+    "t": {"d": 9},
+    "v": {"f": 8, "w": 1},
+    "w": {"v": 1},
+    "x": {"c": 5, "k": 5, "q": 5, "s": 5},
+    "z": {"s": 5}
+}
 
 
-_xTransCharsForSpelling = str.maketrans({
-    'ſ': 's',  'ﬃ': 'ffi',  'ﬄ': 'ffl',  'ﬀ': 'ff',  'ﬅ': 'ft',  'ﬁ': 'fi',  'ﬂ': 'fl',  'ﬆ': 'st'
-})
-
-def spellingNormalization (sWord):
-    "nomalization NFC and removing ligatures"
-    return unicodedata.normalize("NFC", sWord.translate(_xTransCharsForSpelling))
-
-
-_xTransCharsForSimplification = str.maketrans({
-    'à': 'a',  'é': 'é',  'î': 'i',  'ô': 'o',  'û': 'u',  'ÿ': 'i',  "y": "i",
-    'â': 'a',  'è': 'é',  'ï': 'i',  'ö': 'o',  'ù': 'u',  'ŷ': 'i',
-    'ä': 'a',  'ê': 'é',  'í': 'i',  'ó': 'o',  'ü': 'u',  'ý': 'i',
-    'á': 'a',  'ë': 'é',  'ì': 'i',  'ò': 'o',  'ú': 'u',  'ỳ': 'i',
-    'ā': 'a',  'ē': 'é',  'ī': 'i',  'ō': 'o',  'ū': 'u',  'ȳ': 'i',
-    'ç': 'c',  'ñ': 'n',  'k': 'q',  'w': 'v',
-    'œ': 'oe',  'æ': 'ae',
-    'ſ': 's',  'ﬃ': 'ffi',  'ﬄ': 'ffl',  'ﬀ': 'ff',  'ﬅ': 'ft',  'ﬁ': 'fi',  'ﬂ': 'fl',  'ﬆ': 'st',
-    "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4", "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9",
-    "₀": "0", "₁": "1", "₂": "2", "₃": "3", "₄": "4", "₅": "5", "₆": "6", "₇": "7", "₈": "8", "₉": "9"
-})
-
-def simplifyWord (sWord):
-    "word simplication before calculating distance between words"
-    sWord = sWord.lower().translate(_xTransCharsForSimplification)
-    sNewWord = ""
-    for i, c in enumerate(sWord, 1):
-        if c == 'e' or c != sWord[i:i+1]:  # exception for <e> to avoid confusion between crée / créai
-            sNewWord += c
-    return sNewWord.replace("eau", "o").replace("au", "o").replace("ai", "ẽ").replace("ei", "ẽ").replace("ph", "f")
-
-
-_xTransNumbersToExponent = str.maketrans({
-    "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹"
-})
-
-def numbersToExponent (sWord):
-    "convert numeral chars to exponant chars"
-    return sWord.translate(_xTransNumbersToExponent)
+def distanceBetweenChars (c1, c2):
+    "returns a float between 0 and 1"
+    if c1 == c2:
+        return 0
+    if c1 not in dDistanceBetweenChars:
+        return 1
+    return dDistanceBetweenChars[c1].get(c2, 1)
 
 
 aVowel = set("aáàâäāeéèêëēiíìîïīoóòôöōuúùûüūyýỳŷÿȳœæAÁÀÂÄĀEÉÈÊËĒIÍÌÎÏĪOÓÒÔÖŌUÚÙÛÜŪYÝỲŶŸȲŒÆ")
@@ -56,6 +55,19 @@ aDouble = set("bcdfjklmnprstzBCDFJKLMNPRSTZ")  # letters that may be used twice 
 # Similar chars
 
 d1to1 = {
+    "'": "'’",  # U+0027: apostrophe droite
+    "’": "’",   # U+2019: apostrophe typographique  (sera utilisée par défaut)
+    "ʼ": "ʼ’",  # U+02BC: Lettre modificative apostrophe
+    "‘": "‘’",  # U+2018: guillemet-apostrophe culbuté
+    "‛": "‛’",  # U+201B: guillemet-virgule supérieur culbuté
+    "´": "´’",  # U+00B4: accent aigu
+    "`": "`’",  # U+0060: accent grave
+    "′": "′’",  # U+2032: prime
+    "‵": "‵’",  # U+2035: prime réfléchi
+    "՚": "՚’",  # U+055A: apostrophe arménienne
+    "ꞌ": "ꞌ’",  # U+A78C: latin minuscule saltillo
+    "Ꞌ": "Ꞌ’",  # U+A78B: latin majuscule saltillo
+
     "1": "1₁liîLIÎ",
     "2": "2₂zZ",
     "3": "3₃eéèêEÉÈÊ",
@@ -308,8 +320,8 @@ d2toX = {
 dFinal1 = {
     "a": ("as", "at", "ant", "ah"),
     "A": ("AS", "AT", "ANT", "AH"),
-    "c": ("ch",),
-    "C": ("CH",),
+    "c": ("ch", "que"),
+    "C": ("CH", "QUE"),
     "e": ("et", "er", "ets", "ée", "ez", "ai", "ais", "ait", "ent", "eh"),
     "E": ("ET", "ER", "ETS", "ÉE", "EZ", "AI", "AIS", "AIT", "ENT", "EH"),
     "é": ("et", "er", "ets", "ée", "ez", "ai", "ais", "ait"),
@@ -324,6 +336,8 @@ dFinal1 = {
     "G": ("GH",),
     "i": ("is", "it", "ie", "in"),
     "I": ("IS", "IT", "IE", "IN"),
+    "k": ("que",),
+    "K": ("QUE",),
     "n": ("nt", "nd", "ns", "nh"),
     "N": ("NT", "ND", "NS", "NH"),
     "o": ("aut", "ot", "os"),
@@ -347,8 +361,8 @@ dFinal2 = {
     "AI": ("AIENT", "AIS", "ET"),
     "an": ("ant", "ent"),
     "AN": ("ANT", "ENT"),
-    "en": ("ent", "ant"),
-    "EN": ("ENT", "ANT"),
+    "en": ("ent", "ant", "ène", "enne"),
+    "EN": ("ENT", "ANT", "ÈNE", "ENNE"),
     "ei": ("ait", "ais"),
     "EI": ("AIT", "AIS"),
     "on": ("ons", "ont"),
@@ -356,39 +370,3 @@ dFinal2 = {
     "oi": ("ois", "oit", "oix"),
     "OI": ("OIS", "OIT", "OIX"),
 }
-
-
-# Préfixes et suffixes
-
-aPfx1 = frozenset([
-    "anti", "archi", "contre", "hyper", "mé", "méta", "im", "in", "ir", "par", "proto",
-    "pseudo", "pré", "re", "ré", "sans", "sous", "supra", "sur", "ultra"
-])
-aPfx2 = frozenset([
-    "belgo", "franco", "génito", "gynéco", "médico", "russo"
-])
-
-
-_zWordPrefixes = re.compile("(?i)^([ldmtsnjcç]|lorsqu|presqu|jusqu|puisqu|quoiqu|quelqu|qu)[’'‘`ʼ]([\\w-]+)")
-_zWordSuffixes = re.compile("(?i)^(\\w+)(-(?:t-|)(?:ils?|elles?|on|je|tu|nous|vous|ce))$")
-
-def cut (sWord):
-    "returns a tuple of strings (prefix, trimed_word, suffix)"
-    sPrefix = ""
-    sSuffix = ""
-    m = _zWordPrefixes.search(sWord)
-    if m:
-        sPrefix = m.group(1) + "’"
-        sWord = m.group(2)
-    m = _zWordSuffixes.search(sWord)
-    if m:
-        sWord = m.group(1)
-        sSuffix = m.group(2)
-    return (sPrefix, sWord, sSuffix)
-
-
-# Other functions
-
-def filterSugg (aSugg):
-    "exclude suggestions"
-    return filter(lambda sSugg: not sSugg.endswith(("è", "È")), aSugg)

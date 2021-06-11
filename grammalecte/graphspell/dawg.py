@@ -165,6 +165,10 @@ class DAWG:
         self.nBytesOffset = 0
         self.nMaxOffset = 0
 
+        # binary dictionary
+        self.byDic = b""
+        self.lByDic = []
+
         # build
         lWord.sort()
         oProgBar = ProgressBar(0, len(lWord))
@@ -358,26 +362,15 @@ class DAWG:
 
 
     # BINARY CONVERSION
-    def _calculateBinary (self, nCompressionMethod):
-        print(" > Write DAWG as an indexable binary dictionary [method: %d]" % nCompressionMethod)
-        if nCompressionMethod == 1:
-            self.nBytesArc = ( (self.nArcVal.bit_length() + 2) // 8 ) + 1   # We add 2 bits. See DawgNode.convToBytes1()
-            self.nBytesOffset = 0
-            self._calcNumBytesNodeAddress()
-            self._calcNodesAddress1()
-        elif nCompressionMethod == 2:
-            self.nBytesArc = ( (self.nArcVal.bit_length() + 3) // 8 ) + 1   # We add 3 bits. See DawgNode.convToBytes2()
-            self.nBytesOffset = 0
-            self._calcNumBytesNodeAddress()
-            self._calcNodesAddress2()
-        elif nCompressionMethod == 3:
-            self.nBytesArc = ( (self.nArcVal.bit_length() + 3) // 8 ) + 1   # We add 3 bits. See DawgNode.convToBytes3()
-            self.nBytesOffset = 1
-            self.nMaxOffset = (2 ** (self.nBytesOffset * 8)) - 1
-            self._calcNumBytesNodeAddress()
-            self._calcNodesAddress3()
-        else:
-            print(" # Error: unknown compression method")
+    def _calculateBinary (self):
+        print(" > Write DAWG as an indexable binary dictionary")
+        self.nBytesArc = ( (self.nArcVal.bit_length() + 2) // 8 ) + 1   # We add 2 bits. See DawgNode.convToBytes()
+        self.nBytesOffset = 0
+        self._calcNumBytesNodeAddress()
+        self._calcNodesAddress()
+        self.byDic = self.oRoot.convToBytes(self.nBytesArc, self.nBytesNodeAddress)
+        for oNode in self.lMinimizedNodes:
+            self.byDic += oNode.convToBytes(self.nBytesArc, self.nBytesNodeAddress)
         print("   Arc values (chars, affixes and tags): {}  ->  {} bytes".format( self.nArcVal, len("\t".join(self.lArcVal).encode("utf-8")) ))
         print("   Arc size: {} bytes, Address size: {} bytes   ->   {} * {} = {} bytes".format( self.nBytesArc, self.nBytesNodeAddress, \
                                                                                                 self.nBytesArc+self.nBytesNodeAddress, self.nArc, \
@@ -389,66 +382,40 @@ class DAWG:
         while ((self.nBytesArc + self.nBytesNodeAddress) * self.nArc) > (2 ** (self.nBytesNodeAddress * 8)):
             self.nBytesNodeAddress += 1
 
-    def _calcNodesAddress1 (self):
+    def _calcNodesAddress (self):
         nBytesNode = self.nBytesArc + self.nBytesNodeAddress
         iAddr = len(self.oRoot.arcs) * nBytesNode
         for oNode in self.lMinimizedNodes:
             oNode.addr = iAddr
             iAddr += max(len(oNode.arcs), 1) * nBytesNode
 
-    def _calcNodesAddress2 (self):
-        nBytesNode = self.nBytesArc + self.nBytesNodeAddress
-        iAddr = len(self.oRoot.arcs) * nBytesNode
-        for oNode in self.lSortedNodes:
-            oNode.addr = iAddr
-            iAddr += max(len(oNode.arcs), 1) * nBytesNode
-            for oNextNode in oNode.arcs.values():
-                if (oNode.pos + 1) == oNextNode.pos:
-                    iAddr -= self.nBytesNodeAddress
-                    #break
+    def _binaryToList (self):
+        """
+        Convert binary string to binary list
+        BEFORE: Arc                 Address                                 Arc                 Address
+                ||||||||| ||||||||| ||||||||| ||||||||| ||||||||| ||||||||| ||||||||| ||||||||| ||||||||| ||||||||| ||||||||| ||||||||| ...
 
-    def _calcNodesAddress3 (self):
-        nBytesNode = self.nBytesArc + self.nBytesNodeAddress
-        # theorical nodes size if only addresses and no offset
-        self.oRoot.size = len(self.oRoot.arcs) * nBytesNode
-        for oNode in self.lSortedNodes:
-            oNode.size = max(len(oNode.arcs), 1) * nBytesNode
-        # rewind and calculate dropdown from the end, several times
-        nDiff = self.nBytesNodeAddress - self.nBytesOffset
-        bEnd = False
-        while not bEnd:
-            bEnd = True
-            # recalculate addresses
-            iAddr = self.oRoot.size
-            for oNode in self.lSortedNodes:
-                oNode.addr = iAddr
-                iAddr += oNode.size
-            # rewind and calculate dropdown from the end, several times
-            for i in range(self.nNode-1, -1, -1):
-                nSize = max(len(self.lSortedNodes[i].arcs), 1) * nBytesNode
-                for oNextNode in self.lSortedNodes[i].arcs.values():
-                    if 1 < (oNextNode.addr - self.lSortedNodes[i].addr) < self.nMaxOffset:
-                        nSize -= nDiff
-                if self.lSortedNodes[i].size != nSize:
-                    self.lSortedNodes[i].size = nSize
-                    bEnd = False
+        AFTER:  list of integers: [ arc, address, arc, address, arc, address, ... arc, address ]
+        """
+        self.lByDic = []
+        nAcc = 0
+        byBuffer = b""
+        nDivisor = (self.nBytesArc + self.nBytesNodeAddress) / 2
+        for i in range(0, len(self.byDic)):
+            byBuffer += self.byDic[i:i+1]
+            if nAcc == (self.nBytesArc - 1):
+                self.lByDic.append(int.from_bytes(byBuffer, byteorder="big"))
+                byBuffer = b""
+            elif nAcc == (self.nBytesArc + self.nBytesNodeAddress - 1):
+                self.lByDic.append(round(int.from_bytes(byBuffer, byteorder="big") / nDivisor))
+                byBuffer = b""
+                nAcc = -1
+            nAcc = nAcc + 1
 
-    def getBinaryAsJSON (self, nCompressionMethod=1, bBinaryDictAsHexString=True):
+    def getBinaryAsJSON (self):
         "return a JSON string containing all necessary data of the dictionary (compressed as a binary string)"
-        self._calculateBinary(nCompressionMethod)
-        byDic = b""
-        if nCompressionMethod == 1:
-            byDic = self.oRoot.convToBytes1(self.nBytesArc, self.nBytesNodeAddress)
-            for oNode in self.lMinimizedNodes:
-                byDic += oNode.convToBytes1(self.nBytesArc, self.nBytesNodeAddress)
-        elif nCompressionMethod == 2:
-            byDic = self.oRoot.convToBytes2(self.nBytesArc, self.nBytesNodeAddress)
-            for oNode in self.lSortedNodes:
-                byDic += oNode.convToBytes2(self.nBytesArc, self.nBytesNodeAddress)
-        elif nCompressionMethod == 3:
-            byDic = self.oRoot.convToBytes3(self.nBytesArc, self.nBytesNodeAddress, self.nBytesOffset)
-            for oNode in self.lSortedNodes:
-                byDic += oNode.convToBytes3(self.nBytesArc, self.nBytesNodeAddress, self.nBytesOffset)
+        self._calculateBinary()
+        self._binaryToList()
         return {
             "sHeader": "/grammalecte-fsa/",
             "sLangCode": self.sLangCode,
@@ -467,124 +434,35 @@ class DAWG:
             "nArc": self.nArc,
             "nArcVal": self.nArcVal,
             "lArcVal": self.lArcVal,
-            "nCompressionMethod": nCompressionMethod,
             "nBytesArc": self.nBytesArc,
             "nBytesNodeAddress": self.nBytesNodeAddress,
             "nBytesOffset": self.nBytesOffset,
             # Mozilla’s JS parser don’t like file bigger than 4 Mb!
             # So, if necessary, we use an hexadecimal string, that we will convert later in Firefox’s extension.
             # https://github.com/mozilla/addons-linter/issues/1361
-            "sByDic": byDic.hex()  if bBinaryDictAsHexString  else [ e  for e in byDic ],
+            #"sByDic": self.byDic.hex(),
+            "lByDic": self.lByDic,
             "l2grams": list(self.a2grams)
         }
 
-    def writeAsJSObject (self, spfDst, nCompressionMethod, bInJSModule=False, bBinaryDictAsHexString=True):
+    def writeAsJSObject (self, spfDst):
         "write a file (JSON or JS module) with all the necessary data"
         if not spfDst.endswith(".json"):
-            spfDst += "."+str(nCompressionMethod)+".json"
+            spfDst += ".json"
         with open(spfDst, "w", encoding="utf-8", newline="\n") as hDst:
-            if bInJSModule:
-                hDst.write('// JavaScript\n// Generated data (do not edit)\n\n"use strict";\n\nconst dictionary = ')
-            hDst.write( json.dumps(self.getBinaryAsJSON(nCompressionMethod, bBinaryDictAsHexString), ensure_ascii=False) )
-            if bInJSModule:
-                hDst.write(";\n\nexports.dictionary = dictionary;\n")
-
-    def writeBinary (self, sPathFile, nCompressionMethod, bDebug=False):
-        """
-        Save as a binary file.
-
-        Format of the binary indexable dictionary:
-        Each section is separated with 4 bytes of \0
-
-        - Section Header:
-            /grammalecte-fsa/[compression method]
-                * compression method is an ASCII string
-
-        - Section Informations:
-            /[lang code]
-            /[lang name]
-            /[dictionary name]
-            /[date creation]
-            /[number of chars]
-            /[number of bytes for each arc]
-            /[number of bytes for each address node]
-            /[number of entries]
-            /[number of nodes]
-            /[number of arcs]
-            /[number of affixes]
-                * each field is a ASCII string
-            /[stemming code]
-                * "S" means stems are generated by /suffix_code/,
-                  "A" means they are generated by /affix_code/
-                  See defineSuffixCode() and defineAffixCode() for details.
-                  "N" means no stemming
-
-        - Section Values:
-                * a list of strings encoded in binary from utf-8, each value separated with a tabulation
-
-        - Section Word Graph (nodes / arcs)
-                * A list of nodes which are a list of arcs with an address of the next node.
-                  See DawgNode.convToBytes() for details.
-
-        - Section 2grams:
-                * A list of 2grams (as strings: 2 chars) encoded in binary from utf-8, each value separated with a tabulation
-        """
-        self._calculateBinary(nCompressionMethod)
-        if not sPathFile.endswith(".bdic"):
-            sPathFile += "."+str(nCompressionMethod)+".bdic"
-        with open(sPathFile, 'wb') as hDst:
-            # header
-            hDst.write("/grammalecte-fsa/{}/".format(nCompressionMethod).encode("utf-8"))
-            hDst.write(b"\0\0\0\0")
-            # infos
-            sInfo = "{}//{}//{}//{}//{}//{}//{}//{}//{}//{}//{}//{}//{}".format(self.sLangCode, self.sLangName, self.sDicName, self.sDescription, self._getDate(), \
-                                                                                self.nChar, self.nBytesArc, self.nBytesNodeAddress, \
-                                                                                self.nEntry, self.nNode, self.nArc, self.nAff, self.cStemming)
-            hDst.write(sInfo.encode("utf-8"))
-            hDst.write(b"\0\0\0\0")
-            # lArcVal
-            hDst.write("\t".join(self.lArcVal).encode("utf-8"))
-            hDst.write(b"\0\0\0\0")
-            # 2grams
-            hDst.write("\t".join(self.a2grams).encode("utf-8"))
-            hDst.write(b"\0\0\0\0")
-            # DAWG: nodes / arcs
-            if nCompressionMethod == 1:
-                hDst.write(self.oRoot.convToBytes1(self.nBytesArc, self.nBytesNodeAddress))
-                for oNode in self.lMinimizedNodes:
-                    hDst.write(oNode.convToBytes1(self.nBytesArc, self.nBytesNodeAddress))
-            elif nCompressionMethod == 2:
-                hDst.write(self.oRoot.convToBytes2(self.nBytesArc, self.nBytesNodeAddress))
-                for oNode in self.lSortedNodes:
-                    hDst.write(oNode.convToBytes2(self.nBytesArc, self.nBytesNodeAddress))
-            elif nCompressionMethod == 3:
-                hDst.write(self.oRoot.convToBytes3(self.nBytesArc, self.nBytesNodeAddress, self.nBytesOffset))
-                for oNode in self.lSortedNodes:
-                    hDst.write(oNode.convToBytes3(self.nBytesArc, self.nBytesNodeAddress, self.nBytesOffset))
-        if bDebug:
-            self._writeNodes(sPathFile, nCompressionMethod)
+            hDst.write( json.dumps(self.getBinaryAsJSON(), ensure_ascii=False) )
 
     def _getDate (self):
         return time.strftime("%Y-%m-%d %H:%M:%S")
 
-    def _writeNodes (self, sPathFile, nCompressionMethod):
+    def _writeNodes (self, sPathFile):
         "for debugging only"
         print(" > Write nodes")
-        with open(sPathFile+".nodes."+str(nCompressionMethod)+".txt", 'w', encoding='utf-8', newline="\n") as hDst:
-            if nCompressionMethod == 1:
-                hDst.write(self.oRoot.getTxtRepr1(self.nBytesArc, self.lArcVal)+"\n")
-                #hDst.write( ''.join( [ "%02X " %  z  for z in self.oRoot.convToBytes1(self.nBytesArc, self.nBytesNodeAddress) ] ).strip() )
-                for oNode in self.lMinimizedNodes:
-                    hDst.write(oNode.getTxtRepr1(self.nBytesArc, self.lArcVal)+"\n")
-            if nCompressionMethod == 2:
-                hDst.write(self.oRoot.getTxtRepr2(self.nBytesArc, self.lArcVal)+"\n")
-                for oNode in self.lSortedNodes:
-                    hDst.write(oNode.getTxtRepr2(self.nBytesArc, self.lArcVal)+"\n")
-            if nCompressionMethod == 3:
-                hDst.write(self.oRoot.getTxtRepr3(self.nBytesArc, self.nBytesOffset, self.lArcVal)+"\n")
-                #hDst.write( ''.join( [ "%02X " %  z  for z in self.oRoot.convToBytes3(self.nBytesArc, self.nBytesNodeAddress, self.nBytesOffset) ] ).strip() )
-                for oNode in self.lSortedNodes:
-                    hDst.write(oNode.getTxtRepr3(self.nBytesArc, self.nBytesOffset, self.lArcVal)+"\n")
+        with open(sPathFile+".nodes.txt", 'w', encoding='utf-8', newline="\n") as hDst:
+            hDst.write(self.oRoot.getTxtRepr(self.nBytesArc, self.lArcVal)+"\n")
+            #hDst.write( ''.join( [ "%02X " %  z  for z in self.oRoot.convToBytes(self.nBytesArc, self.nBytesNodeAddress) ] ).strip() )
+            for oNode in self.lMinimizedNodes:
+                hDst.write(oNode.getTxtRepr(self.nBytesArc, self.lArcVal)+"\n")
 
 
 
@@ -601,7 +479,6 @@ class DawgNode:
         self.arcs = {}          # key: arc value; value: a node
         self.addr = 0           # address in the binary dictionary
         self.pos = 0            # position in the binary dictionary (version 2)
-        self.size = 0           # size of node in bytes (version 3)
 
     @classmethod
     def resetNextId (cls):
@@ -648,7 +525,7 @@ class DawgNode:
         self.arcs = collections.OrderedDict(sorted(self.arcs.items(), key=lambda t: dValOccur.get(lArcVal[t[0]], 0), reverse=True))
 
     # VERSION 1 =====================================================================================================
-    def convToBytes1 (self, nBytesArc, nBytesNodeAddress):
+    def convToBytes (self, nBytesArc, nBytesNodeAddress):
         """
         Convert to bytes (method 1).
 
@@ -690,7 +567,7 @@ class DawgNode:
             by += self.arcs[arc].addr.to_bytes(nBytesNodeAddress, byteorder='big')
         return by
 
-    def getTxtRepr1 (self, nBytesArc, lVal):
+    def getTxtRepr (self, nBytesArc, lVal):
         "return representation as string of node (method 1)"
         nArc = len(self.arcs)
         nFinalNodeMask = 1 << ((nBytesArc*8)-1)
@@ -707,157 +584,6 @@ class DawgNode:
                 val = val | nFinalArcMask
             s += "  {:<20}  {:0>16}  i{:_>10}   #{:_>10}\n".format(lVal[arc], bin(val)[2:], self.arcs[arc].i, self.arcs[arc].addr)
         return s
-
-    # VERSION 2 =====================================================================================================
-    def convToBytes2 (self, nBytesArc, nBytesNodeAddress):
-        """
-        Convert to bytes (method 2).
-
-        Node scheme:
-        - Arc length is defined by nBytesArc
-        - Address length is defined by nBytesNodeAddress
-
-        |                Arc                |                         Address of next node                          |
-        |                                   |                                                                       |
-         ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓
-         ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃
-         ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛
-         [...]
-         ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓
-         ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃
-         ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛
-          ^ ^ ^
-          ┃ ┃ ┃
-          ┃ ┃ ┗━━ if 1, caution, no address: next node is the following node
-          ┃ ┗━━━━ if 1, last arc of this node
-          ┗━━━━━━ if 1, this node is final (only on the first arc)
-        """
-        nArc = len(self.arcs)
-        nFinalNodeMask = 1 << ((nBytesArc*8)-1)
-        nFinalArcMask = 1 << ((nBytesArc*8)-2)
-        nNextNodeMask = 1 << ((nBytesArc*8)-3)
-        if not nArc:
-            val = nFinalNodeMask | nFinalArcMask
-            by = val.to_bytes(nBytesArc, byteorder='big')
-            by += (0).to_bytes(nBytesNodeAddress, byteorder='big')
-            return by
-        by = b""
-        for i, arc in enumerate(self.arcs, 1):
-            val = arc
-            if i == 1 and self.final:
-                val = val | nFinalNodeMask
-            if i == nArc:
-                val = val | nFinalArcMask
-            if (self.pos + 1) == self.arcs[arc].pos and self.i != 0:
-                val = val | nNextNodeMask
-                by += val.to_bytes(nBytesArc, byteorder='big')
-            else:
-                by += val.to_bytes(nBytesArc, byteorder='big')
-                by += self.arcs[arc].addr.to_bytes(nBytesNodeAddress, byteorder='big')
-        return by
-
-    def getTxtRepr2 (self, nBytesArc, lVal):
-        "return representation as string of node (method 2)"
-        nArc = len(self.arcs)
-        nFinalNodeMask = 1 << ((nBytesArc*8)-1)
-        nFinalArcMask = 1 << ((nBytesArc*8)-2)
-        nNextNodeMask = 1 << ((nBytesArc*8)-3)
-        s = "i{:_>10} -- #{:_>10}\n".format(self.i, self.addr)
-        if not nArc:
-            s += "  {:<20}  {:0>16}  i{:_>10}   #{:_>10}\n".format("", bin(nFinalNodeMask | nFinalArcMask)[2:], "0", "0")
-            return s
-        for i, arc in enumerate(self.arcs, 1):
-            val = arc
-            if i == 1 and self.final:
-                val = val | nFinalNodeMask
-            if i == nArc:
-                val = val | nFinalArcMask
-            if (self.pos + 1) == self.arcs[arc].pos  and self.i != 0:
-                val = val | nNextNodeMask
-                s += "  {:<20}  {:0>16}\n".format(lVal[arc], bin(val)[2:])
-            else:
-                s += "  {:<20}  {:0>16}  i{:_>10}   #{:_>10}\n".format(lVal[arc], bin(val)[2:], self.arcs[arc].i, self.arcs[arc].addr)
-        return s
-
-    # VERSION 3 =====================================================================================================
-    def convToBytes3 (self, nBytesArc, nBytesNodeAddress, nBytesOffset):
-        """
-        Convert to bytes (method 3).
-
-        Node scheme:
-        - Arc length is defined by nBytesArc
-        - Address length is defined by nBytesNodeAddress
-        - Offset length is defined by nBytesOffset
-
-        |                Arc                |            Address of next node  or  offset to next node              |
-        |                                   |                                                                       |
-         ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓
-         ┃1┃0┃0┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃
-         ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛
-         [...]
-         ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓
-         ┃0┃0┃1┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃     Offsets are shorter than addresses
-         ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛
-         ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓ ┏━━━━━━━━━━━━━━━┓
-         ┃0┃1┃0┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃ ┃
-         ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━┛
-
-          ^ ^ ^
-          ┃ ┃ ┃
-          ┃ ┃ ┗━━ if 1, offset instead of address of next node
-          ┃ ┗━━━━ if 1, last arc of this node
-          ┗━━━━━━ if 1, this node is final (only on the first arc)
-        """
-        nArc = len(self.arcs)
-        nFinalNodeMask = 1 << ((nBytesArc*8)-1)
-        nFinalArcMask = 1 << ((nBytesArc*8)-2)
-        nNextNodeMask = 1 << ((nBytesArc*8)-3)
-        nMaxOffset = (2 ** (nBytesOffset * 8)) - 1
-        if not nArc:
-            val = nFinalNodeMask | nFinalArcMask
-            by = val.to_bytes(nBytesArc, byteorder='big')
-            by += (0).to_bytes(nBytesNodeAddress, byteorder='big')
-            return by
-        by = b""
-        for i, arc in enumerate(self.arcs, 1):
-            val = arc
-            if i == 1 and self.final:
-                val = val | nFinalNodeMask
-            if i == nArc:
-                val = val | nFinalArcMask
-            if 1 < (self.arcs[arc].addr - self.addr) < nMaxOffset and self.i != 0:
-                val = val | nNextNodeMask
-                by += val.to_bytes(nBytesArc, byteorder='big')
-                by += (self.arcs[arc].addr-self.addr).to_bytes(nBytesOffset, byteorder='big')
-            else:
-                by += val.to_bytes(nBytesArc, byteorder='big')
-                by += self.arcs[arc].addr.to_bytes(nBytesNodeAddress, byteorder='big')
-        return by
-
-    def getTxtRepr3 (self, nBytesArc, nBytesOffset, lVal):
-        "return representation as string of node (method 3)"
-        nArc = len(self.arcs)
-        nFinalNodeMask = 1 << ((nBytesArc*8)-1)
-        nFinalArcMask = 1 << ((nBytesArc*8)-2)
-        nNextNodeMask = 1 << ((nBytesArc*8)-3)
-        nMaxOffset = (2 ** (nBytesOffset * 8)) - 1
-        s = "i{:_>10} -- #{:_>10}  ({})\n".format(self.i, self.addr, self.size)
-        if not nArc:
-            s += "  {:<20}  {:0>16}  i{:_>10}   #{:_>10}\n".format("", bin(nFinalNodeMask | nFinalArcMask)[2:], "0", "0")
-            return s
-        for i, arc in enumerate(self.arcs, 1):
-            val = arc
-            if i == 1 and self.final:
-                val = val | nFinalNodeMask
-            if i == nArc:
-                val = val | nFinalArcMask
-            if 1 < (self.arcs[arc].addr - self.addr) < nMaxOffset and self.i != 0:
-                val = val | nNextNodeMask
-                s += "  {:<20}  {:0>16}  i{:_>10}   +{:_>10}\n".format(lVal[arc], bin(val)[2:], self.arcs[arc].i, self.arcs[arc].addr - self.addr)
-            else:
-                s += "  {:<20}  {:0>16}  i{:_>10}   #{:_>10}\n".format(lVal[arc], bin(val)[2:], self.arcs[arc].i, self.arcs[arc].addr)
-        return s
-
 
 
 # Another attempt to sort node arcs
