@@ -8,11 +8,13 @@ import sys
 import os.path
 import argparse
 import json
+import itertools
 import re
 import traceback
 
 import grammalecte
 import grammalecte.text as txt
+import grammalecte.graphspell.str_transform as strt
 from grammalecte.graphspell.echo import echo
 
 
@@ -27,7 +29,8 @@ Analysis commands:
     !word                               spelling suggestion
     >word                               draw path of word in the word graph
     =[filter1][=[filter2]]              show entries which fit to filters (filter1 for word, filter2 for morphology)
-    $some_text                         show sentences and tokens of text
+    ≠word|word|…                        show distance between words
+    $some_text                          show sentences and tokens of text
 
 Other commands:
     /help                       /h      show this text
@@ -129,6 +132,10 @@ def getCommand ():
 
 def main ():
     "launch the CLI (command line interface)"
+    if sys.version_info < (3, 5):
+        print("Python 3.5+ required")
+        return
+
     xParser = argparse.ArgumentParser()
     xParser.add_argument("-f", "--file", help="parse file (UTF-8 required!) [on Windows, -f is similar to -ff]", type=str)
     xParser.add_argument("-ff", "--file_to_file", help="parse file (UTF-8 required!) and create a result file (*.res.txt)", type=str)
@@ -153,7 +160,6 @@ def main ():
 
     oGrammarChecker = grammalecte.GrammarChecker("fr")
     oSpellChecker = oGrammarChecker.getSpellChecker()
-    oLexicographer = oGrammarChecker.getLexicographer()
     oTextFormatter = oGrammarChecker.getTextFormatter()
     if xArgs.personal_dict:
         oJSON = loadDictionary(xArgs.personal_dict)
@@ -271,8 +277,10 @@ def main ():
                 for sWord in sText[1:].strip().split():
                     if sWord:
                         echo("* " + sWord)
-                        for sMorph in oSpellChecker.getMorph(sWord):
-                            echo("  {:<32} {}".format(sMorph, oLexicographer.formatTags(sMorph)))
+                        for sElem, aRes in oSpellChecker.analyze(sWord):
+                            echo("  - " + sElem)
+                            for sMorph, sMeaning in aRes:
+                                echo("      {:<40}  {}".format(sMorph, sMeaning))
             elif sText.startswith("!"):
                 for sWord in sText[1:].strip().split():
                     if sWord:
@@ -291,6 +299,11 @@ def main ():
                     sTagsPattern = ""
                 for aRes in oSpellChecker.select(sFlexPattern, sTagsPattern):
                     echo("{:<30} {:<30} {}".format(*aRes))
+            elif sText.startswith("≠"):
+                lWords = sText[1:].split("|")
+                for s1, s2 in itertools.combinations(lWords, 2):
+                    nDist = strt.distanceDamerauLevenshtein(s1, s2)
+                    print(f"{s1} ≠ {s2}: {nDist}")
             elif sText.startswith("/o+ "):
                 oGrammarChecker.gce.setOptions({ opt:True  for opt in sText[3:].strip().split()  if opt in oGrammarChecker.gce.getOptions() })
                 echo("done")
@@ -329,18 +342,31 @@ def main ():
                     if xArgs.textformatter:
                         sParagraph = oTextFormatter.formatText(sParagraph)
                     lParagraphErrors, lSentences = oGrammarChecker.gce.parse(sParagraph, bDebug=xArgs.debug, bFullInfo=True)
-                    echo(txt.getReadableErrors(lParagraphErrors, xArgs.width))
+                    #echo(txt.getReadableErrors(lParagraphErrors, xArgs.width))
                     for dSentence in lSentences:
-                        echo("{nStart}:{nEnd}".format(**dSentence))
-                        echo("   <" + dSentence["sSentence"]+">")
-                        for dToken in dSentence["lToken"]:
-                            echo("    {0[nStart]:>3}:{0[nEnd]:<3} {1} {0[sType]:<14} {2} {0[sValue]:<16} {3:<10}   {4}".format(dToken, \
-                                                                                                            "×" if dToken.get("bToRemove", False) else " ",
-                                                                                                            "!" if dToken["sType"] == "WORD" and not dToken.get("bValidToken", False) else " ",
-                                                                                                            " ".join(dToken.get("lMorph", "")), \
-                                                                                                            "·".join(dToken.get("aTags", "")) ) )
-                        echo(txt.getReadableErrors(dSentence["lGrammarErrors"], xArgs.width))
+                        echo("{nStart}:{nEnd}  <{sSentence}>".format(**dSentence))
+                        for dToken in dSentence["lTokens"]:
+                            if dToken["sType"] == "INFO" or "bMerged" in dToken:
+                                continue
+                            echo("  {0[nStart]:>3}:{0[nEnd]:<3} {1} {0[sType]:<14} {2} {0[sValue]:<16} {3}".format(dToken, \
+                                                                                                        "×" if dToken.get("bToRemove", False) else " ",
+                                                                                                        "!" if dToken["sType"] == "WORD" and not dToken.get("bValidToken", False) else " ",
+                                                                                                        " ".join(dToken.get("aTags", "")) ) )
+                            if "lMorph" in dToken:
+                                for sMorph, sLabel in zip(dToken["lMorph"], dToken["aLabels"]):
+                                    echo("            {0:40}  {1}".format(sMorph, sLabel))
+                            if "lSubTokens" in dToken:
+                                for dSubToken in dToken["lSubTokens"]:
+                                    if dSubToken["sValue"]:
+                                        echo("              · {0:20}".format(dSubToken["sValue"]))
+                                        for sMorph, sLabel in zip(dSubToken["lMorph"], dSubToken["aLabels"]):
+                                            echo("                {0:40}  {1}".format(sMorph, sLabel))
+                        #echo(txt.getReadableErrors(dSentence["lGrammarErrors"], xArgs.width))
             else:
+                if sText.startswith("TEST: "):
+                    sText = sText[6:]
+                    sText = sText.replace("{{", "").replace("}}", "")
+                    sText = re.sub(" ->> .*$", "", sText).rstrip()
                 for sParagraph in txt.getParagraph(sText):
                     if xArgs.textformatter:
                         sParagraph = oTextFormatter.formatText(sParagraph)
