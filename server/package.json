@@ -1,0 +1,22 @@
+{
+  "name": "grammalecte-server",
+  "description": "Server part of Grammalecte language server.",
+  "author": {
+    "name": "Guillaume Gérard",
+    "url": "https://guillaume.sh"
+  },
+  "license": "GPL-3.0",
+  "version": "0.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Microsoft/vscode-extension-samples"
+  },
+  "engines": {
+    "node": "*"
+  },
+  "dependencies": {
+    "vscode-languageserver": "^7.0.0",
+    "vscode-languageserver-textdocument": "^1.0.1"
+  },
+  "scripts": {}
+}
