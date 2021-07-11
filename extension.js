@@ -2,6 +2,10 @@ const vscode = require("vscode");
 const { spawn } = require("child_process");
 const path = require("path");
 
+function _transformErrorInDecorator(line, error) {
+  console.log(line, error.nStart, error.nEnd, error.sMessage);
+}
+
 /**
  * @param {vscode.ExtensionContext} context
  */
@@ -20,7 +24,14 @@ function activate(context) {
         ]);
         grammalecte.stdout.on("data", (data) => {
           const json = JSON.parse(data.toString());
-          console.log(json);
+          for (let paragraph of json.data) {
+            for (let grammarError of paragraph.lGrammarErrors) {
+              _transformErrorInDecorator(paragraph.iParagraph, grammarError);
+            }
+            for (let spellingError of paragraph.lSpellingErrors) {
+              _transformErrorInDecorator(paragraph.iParagraph, spellingError);
+            }
+          }
         });
       }
     }
